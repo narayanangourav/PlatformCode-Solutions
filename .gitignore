@@ -1,2 +1,7 @@
 # Local environment files may contain authenticated session cookies.
 .env
+
+# Python bytecode and test-tool caches.
+__pycache__/
+*.py[cod]
+.pytest_cache/

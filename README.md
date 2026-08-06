@@ -12,7 +12,7 @@ code/
 scripts/
   sync_leetcode.py    # Authenticated LeetCode sync script
 leetcode-solutions/
-  <problem-slug>/     # Synced accepted submission source files
+  <problem-slug>/     # README, metadata, and synced accepted source files
 .env.example          # Optional local LeetCode session configuration
 ```
 
@@ -58,10 +58,10 @@ The workflow uses the `github.token` permission to commit changes. Set **Setting
 1. GitHub checks out the repository and installs Python 3.13.
 2. The workflow runs `scripts/sync_leetcode.py` with the two secrets available only as environment variables.
 3. The script requests the authenticated submission history, keeps the latest accepted submission for each problem and language, and retrieves its source code.
-4. Each source file is written only when it has changed, under `leetcode-solutions/<problem-slug>/solution.<extension>`.
+4. Each problem receives a `README.md`, a `metadata.json`, and its latest accepted source file for each language under `leetcode-solutions/<problem-slug>/`.
 5. Git stages only `leetcode-solutions/`. If nothing changed, it ends successfully; otherwise, it creates and pushes a `Sync LeetCode solutions` commit.
 
-The script deliberately stores only your submitted source code, not LeetCode problem statements. It uses Python's standard library, so `requirements.txt` has no external dependencies.
+On the first run, the script paginates through all accessible accepted submissions. Later runs use `metadata.json` to avoid downloading source code for submission IDs that are already synchronized. The script deliberately stores source and basic identifiers only, not LeetCode problem statements. It uses Python's standard library, so `requirements.txt` has no external dependencies.
 
 ## Adding a solution
 

@@ -53,6 +53,7 @@ query submissions($offset: Int!, $limit: Int!, $slug: String) {
       id
       lang
       statusDisplay
+      title
       titleSlug
     }
   }
@@ -74,6 +75,7 @@ class Submission:
 
     submission_id: int
     language: str
+    title: str
     title_slug: str
 
 
@@ -136,14 +138,15 @@ def parse_submission(value: object) -> Submission | None:
         return None
     submission_id = value.get("id")
     language = value.get("lang")
+    title = value.get("title")
     title_slug = value.get("titleSlug")
     if not isinstance(submission_id, str) or not submission_id.isdigit():
         return None
-    if not isinstance(language, str) or not isinstance(title_slug, str):
+    if not isinstance(language, str) or not isinstance(title, str) or not isinstance(title_slug, str):
         return None
     if not title_slug or language not in LANGUAGE_EXTENSIONS:
         return None
-    return Submission(int(submission_id), language, title_slug)
+    return Submission(int(submission_id), language, title, title_slug)
 
 
 def get_accepted_submissions(session: str, csrf_token: str) -> list[Submission]:
@@ -203,6 +206,70 @@ def get_solution_path(submission: Submission) -> Path:
     return DESTINATION_DIRECTORY / safe_slug / f"solution.{extension}"
 
 
+def get_metadata_path(submission: Submission) -> Path:
+    """Return the metadata path for a synced problem."""
+    return get_solution_path(submission).parent / "metadata.json"
+
+
+def get_readme_path(submission: Submission) -> Path:
+    """Return the generated README path for a synced problem."""
+    return get_solution_path(submission).parent / "README.md"
+
+
+def load_synced_submission_id(path: Path, language: str) -> int | None:
+    """Read the synced submission ID for one language, if valid metadata exists."""
+    if not path.is_file():
+        return None
+    try:
+        metadata = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(metadata, dict):
+        return None
+    submissions = metadata.get("submissions")
+    if not isinstance(submissions, dict):
+        return None
+    submission_id = submissions.get(language)
+    return submission_id if isinstance(submission_id, int) else None
+
+
+def write_problem_metadata(submission: Submission) -> bool:
+    """Record source-only problem metadata without copying LeetCode content."""
+    metadata_path = get_metadata_path(submission)
+    existing_submissions: dict[str, int] = {}
+    if metadata_path.is_file():
+        try:
+            existing_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            if isinstance(existing_metadata, dict) and isinstance(existing_metadata.get("submissions"), dict):
+                existing_submissions = {
+                    language: submission_id
+                    for language, submission_id in existing_metadata["submissions"].items()
+                    if isinstance(language, str) and isinstance(submission_id, int)
+                }
+        except json.JSONDecodeError:
+            pass
+    existing_submissions[submission.language] = submission.submission_id
+    content = json.dumps(
+        {"title": submission.title, "titleSlug": submission.title_slug, "submissions": existing_submissions},
+        indent=2,
+        sort_keys=True,
+    ) + "\n"
+    if metadata_path.is_file() and metadata_path.read_text(encoding="utf-8") == content:
+        return False
+    metadata_path.write_text(content, encoding="utf-8", newline="\n")
+    return True
+
+
+def write_problem_readme(submission: Submission) -> bool:
+    """Create a local index for the synced source without reproducing problem content."""
+    readme_path = get_readme_path(submission)
+    content = f"# {submission.title}\n\nLeetCode problem: https://leetcode.com/problems/{submission.title_slug}/\n"
+    if readme_path.is_file():
+        return False
+    readme_path.write_text(content, encoding="utf-8", newline="\n")
+    return True
+
+
 def write_solution(path: Path, code: str) -> bool:
     """Write source only when it changes and return whether a file was updated."""
     normalized_code = code.rstrip() + "\n"
@@ -222,8 +289,13 @@ def main() -> int:
         updated_count = 0
         for submission in submissions:
             solution_path = get_solution_path(submission)
+            metadata_path = get_metadata_path(submission)
+            if load_synced_submission_id(metadata_path, submission.language) == submission.submission_id:
+                continue
             code = get_submission_code(submission, session, csrf_token)
             updated_count += write_solution(solution_path, code)
+            updated_count += write_problem_metadata(submission)
+            updated_count += write_problem_readme(submission)
         print(f"Synchronized {updated_count} solution file(s).")
         return 0
     except LeetCodeSyncError as error:

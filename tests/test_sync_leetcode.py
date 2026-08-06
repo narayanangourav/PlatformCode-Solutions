@@ -4,7 +4,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.sync_leetcode import Submission, get_solution_path, parse_submission, write_solution
+from scripts.sync_leetcode import (
+    Submission,
+    get_solution_path,
+    load_synced_submission_id,
+    parse_submission,
+    write_solution,
+)
 
 
 class SyncLeetCodeTests(unittest.TestCase):
@@ -16,7 +22,7 @@ class SyncLeetCodeTests(unittest.TestCase):
         self.assertIsNone(submission)
 
     def test_solution_path_uses_slug_and_language_extension(self) -> None:
-        path = get_solution_path(Submission(1, "python3", "two-sum"))
+        path = get_solution_path(Submission(1, "python3", "Two Sum", "two-sum"))
 
         self.assertEqual(path, Path("leetcode-solutions/two-sum/solution.py"))
 
@@ -27,3 +33,10 @@ class SyncLeetCodeTests(unittest.TestCase):
             self.assertTrue(write_solution(path, "print('first')"))
             self.assertFalse(write_solution(path, "print('first')\n"))
             self.assertTrue(write_solution(path, "print('second')"))
+
+    def test_metadata_tracks_submission_per_language(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            metadata_path = Path(directory) / "metadata.json"
+            metadata_path.write_text('{"submissions": {"python3": 1}}', encoding="utf-8")
+
+            self.assertEqual(load_synced_submission_id(metadata_path, "python3"), 1)
