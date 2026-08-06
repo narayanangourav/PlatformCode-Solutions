@@ -1,2 +1,70 @@
-# LeetCode-Solutions
-LeetCode is the best platform to help you enhance your skills, expand your knowledge and prepare for technical interviews
+# LeetCode Solutions
+
+A personal collection of Python solutions to LeetCode problems. Each solution follows LeetCode's expected `Solution` class format, so it can be copied directly into the online editor.
+
+## Repository structure
+
+```text
+code/
+  <problem-name>.py   # One solution per LeetCode problem
+.github/workflows/
+  sync-leetcode.yml   # Manually triggered sync workflow
+scripts/
+  sync_leetcode.py    # Authenticated LeetCode sync script
+leetcode-solutions/
+  <problem-slug>/     # Synced accepted submission source files
+.env.example          # Optional local LeetCode session configuration
+```
+
+## Requirements
+
+- Python 3.10 or later
+
+The submitted solution files do not require third-party packages. LeetCode supplies the runtime types and invokes the appropriate method when a solution is submitted.
+
+## Using a solution locally
+
+1. Open a file in `code/` and review the `Solution` class and its method signature.
+2. Copy the class into the matching LeetCode problem's editor, or create a small local test harness that calls the method.
+3. Run your harness with Python:
+
+   ```bash
+   python path/to/your_test.py
+   ```
+
+## Optional LeetCode session configuration
+
+The environment variables are only needed by local tooling that accesses an authenticated LeetCode session; the solution files themselves do not use them.
+
+1. Copy `.env.example` to `.env`.
+2. Set `csrftoken` and `LEETCODE_SESSION` to the corresponding cookie values from your own signed-in LeetCode browser session.
+3. Keep `.env` private. It is excluded from Git because these values grant access to your account session.
+
+Never commit or share real cookie values. If a value is exposed, sign out of LeetCode or revoke the affected session and create a new one.
+
+`LEETCODE_SESSION` may expire. When it does, copy the new cookie values and update the two GitHub repository secrets; do not change the workflow file.
+
+## Sync accepted submissions
+
+The workflow at `.github/workflows/sync-leetcode.yml` is started manually from **Actions → Sync LeetCode Solutions → Run workflow**. Before the first run, add these repository secrets under **Settings → Secrets and variables → Actions**:
+
+- `LEETCODE_CSRF_TOKEN`: the value of your browser's `csrftoken` cookie.
+- `LEETCODE_SESSION`: the value of your browser's `LEETCODE_SESSION` cookie.
+
+The workflow uses the `github.token` permission to commit changes. Set **Settings → Actions → General → Workflow permissions** to **Read and write permissions**.
+
+### Sync flow
+
+1. GitHub checks out the repository and installs Python 3.13.
+2. The workflow runs `scripts/sync_leetcode.py` with the two secrets available only as environment variables.
+3. The script requests the authenticated submission history, keeps the latest accepted submission for each problem and language, and retrieves its source code.
+4. Each source file is written only when it has changed, under `leetcode-solutions/<problem-slug>/solution.<extension>`.
+5. Git stages only `leetcode-solutions/`. If nothing changed, it ends successfully; otherwise, it creates and pushes a `Sync LeetCode solutions` commit.
+
+The script deliberately stores only your submitted source code, not LeetCode problem statements. It uses Python's standard library, so `requirements.txt` has no external dependencies.
+
+## Adding a solution
+
+1. Add one Python file to `code/` using a descriptive problem name.
+2. Keep the public method signature compatible with LeetCode.
+3. Verify the solution against the problem's examples and edge cases before committing.

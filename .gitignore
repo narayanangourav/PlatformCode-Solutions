@@ -1,0 +1,2 @@
+# Local environment files may contain authenticated session cookies.
+.env
