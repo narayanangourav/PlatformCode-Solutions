@@ -2,12 +2,17 @@ name: Sync LeetCode Solutions
 
 on:
   workflow_dispatch:
+  push:
+  schedule:
+    # GitHub Actions schedules use UTC: Saturday 18:30 UTC is Sunday 00:00 IST.
+    - cron: "30 18 * * 6"
 
 permissions:
   contents: write
 
 jobs:
   sync-leetcode:
+    if: github.event_name != 'schedule' || vars.LEETCODE_SYNC_CRON_DISABLED != 'true'
     runs-on: ubuntu-latest
 
     steps:

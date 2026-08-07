@@ -46,12 +46,14 @@ Never commit or share real cookie values. If a value is exposed, sign out of Lee
 
 ## Sync accepted submissions
 
-The workflow at `.github/workflows/sync-leetcode.yml` is started manually from **Actions → Sync LeetCode Solutions → Run workflow**. Before the first run, add these repository secrets under **Settings → Secrets and variables → Actions**:
+The workflow at `.github/workflows/sync-leetcode.yml` runs manually from **Actions → Sync LeetCode Solutions → Run workflow**, after every push, and every Sunday at 12:00 AM India Standard Time (Saturday 6:30 PM UTC). Before the first run, add these repository secrets under **Settings → Secrets and variables → Actions**:
 
 - `LEETCODE_CSRF_TOKEN`: the value of your browser's `csrftoken` cookie.
 - `LEETCODE_SESSION`: the value of your browser's `LEETCODE_SESSION` cookie.
 
 The workflow uses the `github.token` permission to commit changes. Set **Settings → Actions → General → Workflow permissions** to **Read and write permissions**.
+
+To disable only the weekly cron run, create the repository variable `LEETCODE_SYNC_CRON_DISABLED` with the value `true` under **Settings → Secrets and variables → Actions → Variables**. Manual and push-triggered syncs remain enabled. Delete the variable or change its value to re-enable the schedule.
 
 ### Sync flow
 
