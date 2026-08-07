@@ -16,6 +16,7 @@ LEETCODE_GRAPHQL_URL: Final = "https://leetcode.com/graphql/"
 DESTINATION_DIRECTORY: Final = Path("leetcode-solutions")
 REQUEST_TIMEOUT_SECONDS: Final = 30
 PAGE_SIZE: Final = 20
+USER_AGENT: Final = "LeetCode-Solutions-GitHub-Action/1.0"
 
 LANGUAGE_EXTENSIONS: Final[dict[str, str]] = {
     "bash": "sh",
@@ -95,6 +96,8 @@ def create_headers(session: str, csrf_token: str) -> dict[str, str]:
     """Create the authenticated headers required by LeetCode's GraphQL endpoint."""
     return {
         "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": USER_AGENT,
         "Origin": "https://leetcode.com",
         "Referer": "https://leetcode.com/",
         "Cookie": f"csrftoken={csrf_token}; LEETCODE_SESSION={session};",
@@ -114,7 +117,7 @@ def request_graphql(
             payload = json.load(response)
     except HTTPError as error:
         raise LeetCodeSyncError(
-            f"LeetCode request failed with HTTP status {error.code}. Refresh the GitHub secrets and retry."
+            f"LeetCode request failed with HTTP status {error.code}. Verify both GitHub secrets use fresh cookie values and retry."
         ) from error
     except URLError as error:
         raise LeetCodeSyncError("Could not connect to LeetCode. Retry the workflow later.") from error

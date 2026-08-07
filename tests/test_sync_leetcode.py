@@ -6,6 +6,7 @@ from pathlib import Path
 
 from scripts.sync_leetcode import (
     Submission,
+    create_headers,
     get_solution_path,
     load_synced_submission_id,
     parse_submission,
@@ -14,6 +15,13 @@ from scripts.sync_leetcode import (
 
 
 class SyncLeetCodeTests(unittest.TestCase):
+    def test_request_headers_include_csrf_and_user_agent(self) -> None:
+        headers = create_headers("session-value", "csrf-value")
+
+        self.assertEqual(headers["X-CSRFToken"], "csrf-value")
+        self.assertIn("LEETCODE_SESSION=session-value", headers["Cookie"])
+        self.assertTrue(headers["User-Agent"])
+
     def test_parse_submission_rejects_non_accepted_submissions(self) -> None:
         submission = parse_submission(
             {"id": "1", "lang": "python3", "statusDisplay": "Wrong Answer", "titleSlug": "two-sum"}
