@@ -186,18 +186,26 @@ def get_accepted_submissions(session: str, csrf_token: str) -> list[Submission]:
     return list(accepted.values())
 
 
-def get_submission_code(submission: Submission, session: str, csrf_token: str) -> str:
-    """Get the source code for one accepted submission."""
+def extract_submission_code(data: dict[str, object]) -> str | None:
+    """Return source code when LeetCode makes it available for a submission."""
+    details = data.get("submissionDetails")
+    if not isinstance(details, dict):
+        return None
+    code = details.get("code")
+    if not isinstance(code, str) or not code.strip():
+        return None
+    return code
+
+
+def get_submission_code(submission: Submission, session: str, csrf_token: str) -> str | None:
+    """Get source code for one accepted submission, when it is accessible."""
     data = request_graphql(
         SUBMISSION_DETAILS_QUERY,
         {"submissionId": submission.submission_id},
         session,
         csrf_token,
     )
-    details = data.get("submissionDetails")
-    if not isinstance(details, dict) or not isinstance(details.get("code"), str):
-        raise LeetCodeSyncError("LeetCode response did not contain submission source code.")
-    return details["code"]
+    return extract_submission_code(data)
 
 
 def get_solution_path(submission: Submission) -> Path:
@@ -296,6 +304,12 @@ def main() -> int:
             if load_synced_submission_id(metadata_path, submission.language) == submission.submission_id:
                 continue
             code = get_submission_code(submission, session, csrf_token)
+            if code is None:
+                print(
+                    f"Skipped unavailable source for {submission.title_slug} "
+                    f"({submission.language}, submission {submission.submission_id})."
+                )
+                continue
             updated_count += write_solution(solution_path, code)
             updated_count += write_problem_metadata(submission)
             updated_count += write_problem_readme(submission)

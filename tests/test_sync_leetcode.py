@@ -7,6 +7,7 @@ from pathlib import Path
 from scripts.sync_leetcode import (
     Submission,
     create_headers,
+    extract_submission_code,
     get_solution_path,
     load_synced_submission_id,
     parse_submission,
@@ -21,6 +22,9 @@ class SyncLeetCodeTests(unittest.TestCase):
         self.assertEqual(headers["X-CSRFToken"], "csrf-value")
         self.assertIn("LEETCODE_SESSION=session-value", headers["Cookie"])
         self.assertTrue(headers["User-Agent"])
+
+    def test_missing_submission_source_is_skipped(self) -> None:
+        self.assertIsNone(extract_submission_code({"submissionDetails": {"code": None}}))
 
     def test_parse_submission_rejects_non_accepted_submissions(self) -> None:
         submission = parse_submission(
