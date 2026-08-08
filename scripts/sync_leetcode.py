@@ -17,6 +17,7 @@ DESTINATION_DIRECTORY: Final = Path("leetcode-solutions")
 REQUEST_TIMEOUT_SECONDS: Final = 30
 PAGE_SIZE: Final = 20
 USER_AGENT: Final = "LeetCode-Solutions-GitHub-Action/1.0"
+PROBLEM_STATEMENT_MARKER: Final = "<!-- synced-problem-statement -->"
 
 LANGUAGE_EXTENSIONS: Final[dict[str, str]] = {
     "bash": "sh",
@@ -300,11 +301,19 @@ def write_problem_readme(submission: Submission, problem_statement: str | None) 
     source_link = f"https://leetcode.com/problems/{submission.title_slug}/"
     content = f"# {submission.title}\n\nLeetCode problem: {source_link}\n"
     if problem_statement is not None:
-        content = f"# {submission.title}\n\n{problem_statement.rstrip()}\n\nSource: {source_link}\n"
+        content = (
+            f"# {submission.title}\n\n{PROBLEM_STATEMENT_MARKER}\n\n"
+            f"{problem_statement.rstrip()}\n\nSource: {source_link}\n"
+        )
     if readme_path.is_file() and readme_path.read_text(encoding="utf-8") == content:
         return False
     readme_path.write_text(content, encoding="utf-8", newline="\n")
     return True
+
+
+def has_synced_problem_statement(path: Path) -> bool:
+    """Return whether a problem README contains successfully downloaded content."""
+    return path.is_file() and PROBLEM_STATEMENT_MARKER in path.read_text(encoding="utf-8")
 
 
 def write_solution(path: Path, code: str) -> bool:
@@ -330,7 +339,7 @@ def main() -> int:
             is_existing_submission = (
                 load_synced_submission_id(metadata_path, submission.language) == submission.submission_id
             )
-            if is_existing_submission and get_readme_path(submission).is_file():
+            if is_existing_submission and has_synced_problem_statement(get_readme_path(submission)):
                 continue
             if not is_existing_submission:
                 code = get_submission_code(submission, session, csrf_token)
@@ -343,6 +352,8 @@ def main() -> int:
                 updated_count += write_solution(solution_path, code)
                 updated_count += write_problem_metadata(submission)
             problem_statement = get_problem_statement(submission, session, csrf_token)
+            if problem_statement is None:
+                print(f"Problem statement unavailable for {submission.title_slug}.")
             updated_count += write_problem_readme(submission, problem_statement)
         print(f"Synchronized {updated_count} solution file(s).")
         return 0

@@ -10,6 +10,7 @@ from scripts.sync_leetcode import (
     create_headers,
     extract_submission_code,
     get_solution_path,
+    has_synced_problem_statement,
     load_synced_submission_id,
     parse_submission,
     write_problem_readme,
@@ -37,6 +38,7 @@ class SyncLeetCodeTests(unittest.TestCase):
                 self.assertTrue(write_problem_readme(submission, "<p>Find two values.</p>"))
 
             self.assertIn("<p>Find two values.</p>", readme_path.read_text(encoding="utf-8"))
+            self.assertTrue(has_synced_problem_statement(readme_path))
 
     def test_parse_submission_rejects_non_accepted_submissions(self) -> None:
         submission = parse_submission(
