@@ -57,11 +57,12 @@ To disable only the weekly cron run, create the repository variable `LEETCODE_SY
 
 ### Sync flow
 
-1. GitHub checks out the repository and installs Python 3.13.
-2. The workflow runs `scripts/sync_leetcode.py` with the two secrets available only as environment variables.
-3. The script requests the authenticated submission history, keeps the latest accepted submission for each problem and language, and retrieves its source code.
-4. Each problem receives a `README.md`, a `metadata.json`, and its latest accepted source file for each language under `leetcode-solutions/<problem-slug>/`.
-5. Git stages only `leetcode-solutions/`. If nothing changed, it ends successfully; otherwise, it creates and pushes a `Sync LeetCode solutions` commit.
+1. The `test-sync-script` job checks out the repository, installs Python 3.13, and runs the sync-script unit tests.
+2. Only after those tests pass does the `sync-leetcode` job start.
+3. The sync job runs `scripts/sync_leetcode.py` with the two secrets available only as environment variables.
+4. The script requests the authenticated submission history, keeps the latest accepted submission for each problem and language, and retrieves its source code.
+5. Each problem receives a `README.md`, a `metadata.json`, and its latest accepted source file for each language under `leetcode-solutions/<problem-slug>/`.
+6. Git stages only `leetcode-solutions/`. If nothing changed, it ends successfully; otherwise, it creates and pushes a `Sync LeetCode solutions` commit.
 
 On the first run, the script paginates through all accessible accepted submissions. Later runs use `metadata.json` to avoid downloading source code for submission IDs that are already synchronized. The script deliberately stores source and basic identifiers only, not LeetCode problem statements. It uses Python's standard library, so `requirements.txt` has no external dependencies.
 
