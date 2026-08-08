@@ -2,6 +2,7 @@
 
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from scripts.sync_leetcode import (
@@ -11,6 +12,7 @@ from scripts.sync_leetcode import (
     get_solution_path,
     load_synced_submission_id,
     parse_submission,
+    write_problem_readme,
     write_solution,
 )
 
@@ -25,6 +27,16 @@ class SyncLeetCodeTests(unittest.TestCase):
 
     def test_missing_submission_source_is_skipped(self) -> None:
         self.assertIsNone(extract_submission_code({"submissionDetails": {"code": None}}))
+
+    def test_problem_readme_includes_the_accessible_statement(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            readme_path = Path(directory) / "README.md"
+            submission = Submission(1, "python3", "Two Sum", "two-sum")
+
+            with mock.patch("scripts.sync_leetcode.get_readme_path", return_value=readme_path):
+                self.assertTrue(write_problem_readme(submission, "<p>Find two values.</p>"))
+
+            self.assertIn("<p>Find two values.</p>", readme_path.read_text(encoding="utf-8"))
 
     def test_parse_submission_rejects_non_accepted_submissions(self) -> None:
         submission = parse_submission(

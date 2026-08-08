@@ -69,6 +69,14 @@ query submissionDetails($submissionId: Int!) {
 }
 """
 
+QUESTION_DETAILS_QUERY: Final = """
+query questionDetails($titleSlug: String!) {
+  question(titleSlug: $titleSlug) {
+    content
+  }
+}
+"""
+
 
 @dataclass(frozen=True)
 class Submission:
@@ -208,6 +216,21 @@ def get_submission_code(submission: Submission, session: str, csrf_token: str) -
     return extract_submission_code(data)
 
 
+def get_problem_statement(submission: Submission, session: str, csrf_token: str) -> str | None:
+    """Return a problem statement when the authenticated account can access it."""
+    data = request_graphql(
+        QUESTION_DETAILS_QUERY,
+        {"titleSlug": submission.title_slug},
+        session,
+        csrf_token,
+    )
+    question = data.get("question")
+    if not isinstance(question, dict):
+        return None
+    content = question.get("content")
+    return content if isinstance(content, str) and content.strip() else None
+
+
 def get_solution_path(submission: Submission) -> Path:
     """Create a safe, deterministic output path below the destination directory."""
     safe_slug = re.sub(r"[^a-z0-9-]", "", submission.title_slug.lower())
@@ -271,11 +294,14 @@ def write_problem_metadata(submission: Submission) -> bool:
     return True
 
 
-def write_problem_readme(submission: Submission) -> bool:
-    """Create a local index for the synced source without reproducing problem content."""
+def write_problem_readme(submission: Submission, problem_statement: str | None) -> bool:
+    """Create a local problem README with accessible statement content."""
     readme_path = get_readme_path(submission)
-    content = f"# {submission.title}\n\nLeetCode problem: https://leetcode.com/problems/{submission.title_slug}/\n"
-    if readme_path.is_file():
+    source_link = f"https://leetcode.com/problems/{submission.title_slug}/"
+    content = f"# {submission.title}\n\nLeetCode problem: {source_link}\n"
+    if problem_statement is not None:
+        content = f"# {submission.title}\n\n{problem_statement.rstrip()}\n\nSource: {source_link}\n"
+    if readme_path.is_file() and readme_path.read_text(encoding="utf-8") == content:
         return False
     readme_path.write_text(content, encoding="utf-8", newline="\n")
     return True
@@ -301,18 +327,23 @@ def main() -> int:
         for submission in submissions:
             solution_path = get_solution_path(submission)
             metadata_path = get_metadata_path(submission)
-            if load_synced_submission_id(metadata_path, submission.language) == submission.submission_id:
+            is_existing_submission = (
+                load_synced_submission_id(metadata_path, submission.language) == submission.submission_id
+            )
+            if is_existing_submission and get_readme_path(submission).is_file():
                 continue
-            code = get_submission_code(submission, session, csrf_token)
-            if code is None:
-                print(
-                    f"Skipped unavailable source for {submission.title_slug} "
-                    f"({submission.language}, submission {submission.submission_id})."
-                )
-                continue
-            updated_count += write_solution(solution_path, code)
-            updated_count += write_problem_metadata(submission)
-            updated_count += write_problem_readme(submission)
+            if not is_existing_submission:
+                code = get_submission_code(submission, session, csrf_token)
+                if code is None:
+                    print(
+                        f"Skipped unavailable source for {submission.title_slug} "
+                        f"({submission.language}, submission {submission.submission_id})."
+                    )
+                    continue
+                updated_count += write_solution(solution_path, code)
+                updated_count += write_problem_metadata(submission)
+            problem_statement = get_problem_statement(submission, session, csrf_token)
+            updated_count += write_problem_readme(submission, problem_statement)
         print(f"Synchronized {updated_count} solution file(s).")
         return 0
     except LeetCodeSyncError as error:
