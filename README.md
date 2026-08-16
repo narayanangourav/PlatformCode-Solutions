@@ -68,12 +68,14 @@ The workflow uses four dependent jobs: installs dependencies, runs tests, builds
 
 ### Public container images
 
-The workflows publish two public images to GitHub Container Registry:
+The workflows publish two GitHub Container Registry images:
 
 - `ghcr.io/<owner>/leetcode-solutions-sync:latest` is rebuilt after successful sync-workflow tests.
 - `ghcr.io/<owner>/leetcode-solutions-release:<tag>` is published for each release tag, with a `latest` tag as well.
 
 Replace `<owner>` with the GitHub account or organization that owns this repository. Public GHCR images can be pulled without authentication.
+
+GitHub publishes a newly created container package as private by default. After each image name is published for the first time, open the package from your GitHub profile or organization **Packages** page and set **Package settings → Change visibility → Public**. That visibility setting persists for later image tags.
 
 ## Sync accepted submissions
 

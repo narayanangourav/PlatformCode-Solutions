@@ -89,23 +89,6 @@ jobs:
             .
           docker push --all-tags "${IMAGE}"
 
-          if [ "$(gh api "/users/${GITHUB_REPOSITORY_OWNER}" --jq .type)" = "Organization" ]; then
-            PACKAGE_ENDPOINT="/orgs/${GITHUB_REPOSITORY_OWNER}/packages/container/${PACKAGE_NAME}"
-          else
-            PACKAGE_ENDPOINT="/user/packages/container/${PACKAGE_NAME}"
-          fi
-
-          for attempt in {1..12}; do
-            if gh api --method PATCH "$PACKAGE_ENDPOINT" -f visibility=public; then
-              exit 0
-            fi
-            echo "Package visibility update is not ready; retry ${attempt}/12."
-            sleep 10
-          done
-
-          echo "Unable to make ${IMAGE} public after 12 attempts."
-          exit 1
-
   publish-release:
     needs: build-release-container
     if: needs.build-release-container.result == 'success'
