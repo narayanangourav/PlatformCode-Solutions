@@ -37,16 +37,47 @@ The submitted solution files do not require third-party packages. LeetCode suppl
 The environment variables are only needed by local tooling that accesses an authenticated LeetCode session; the solution files themselves do not use them.
 
 1. Copy `.env.example` to `.env`.
-2. Set `csrftoken` and `LEETCODE_SESSION` to the corresponding cookie values from your own signed-in LeetCode browser session.
+2. Set `LEETCODE_CSRF_TOKEN` to the value of the `csrftoken` cookie and `LEETCODE_SESSION` to the value of the matching `LEETCODE_SESSION` cookie from your own signed-in browser session.
 3. Keep `.env` private. It is excluded from Git because these values grant access to your account session.
 
 Never commit or share real cookie values. If a value is exposed, sign out of LeetCode or revoke the affected session and create a new one.
 
 `LEETCODE_SESSION` may expire. When it does, copy the new cookie values and update the two GitHub repository secrets; do not change the workflow file.
 
+## Run the sync locally with Podman
+
+1. Copy `.env.example` to `.env` and provide the two cookie values.
+2. Build and run the sync:
+
+   ```bash
+   podman compose run --rm leetcode-sync
+   ```
+
+The container has no network ports and runs as an unprivileged user. Only `leetcode-solutions/` is mounted read-write, so synced files remain in your working tree. `.env` is excluded from both Git and the container build context.
+
+## Releases
+
+Create a `v*` release tag, such as `v1.0.0`, to run the release workflow. You can either publish a release from **Releases → Draft a new release** in the GitHub web UI, or push a tag from your terminal:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+The workflow uses four dependent jobs: installs dependencies, runs tests, builds and publishes the release image, then creates or updates the matching GitHub Release with a source bundle containing the sync tooling. Existing solutions and local credentials are not included in the bundle.
+
+### Public container images
+
+The workflows publish two public images to GitHub Container Registry:
+
+- `ghcr.io/<owner>/leetcode-solutions-sync:latest` is rebuilt after successful sync-workflow tests.
+- `ghcr.io/<owner>/leetcode-solutions-release:<tag>` is published for each release tag, with a `latest` tag as well.
+
+Replace `<owner>` with the GitHub account or organization that owns this repository. Public GHCR images can be pulled without authentication.
+
 ## Sync accepted submissions
 
-The workflow at `.github/workflows/sync-leetcode.yml` runs manually from **Actions → Sync LeetCode Solutions → Run workflow**, after every push, and every Sunday at 12:00 AM India Standard Time (Saturday 6:30 PM UTC). Before the first run, add these repository secrets under **Settings → Secrets and variables → Actions**:
+The workflow at `.github/workflows/sync-leetcode.yml` runs manually from **Actions → Sync LeetCode Solutions → Run workflow**, after every push, and at 12:00 AM India Standard Time on the 1st, 10th, 20th, and 30th of each month (6:30 PM UTC on the preceding day). Before the first run, add these repository secrets under **Settings → Secrets and variables → Actions**:
 
 - `LEETCODE_CSRF_TOKEN`: the value of your browser's `csrftoken` cookie.
 - `LEETCODE_SESSION`: the value of your browser's `LEETCODE_SESSION` cookie.
@@ -57,12 +88,13 @@ To disable only the weekly cron run, create the repository variable `LEETCODE_SY
 
 ### Sync flow
 
-1. The `test-sync-script` job checks out the repository, installs Python 3.13, and runs the sync-script unit tests.
-2. Only after those tests pass does the `sync-leetcode` job start.
-3. The sync job runs `scripts/sync_leetcode.py` with the two secrets available only as environment variables.
-4. The script requests the authenticated submission history, keeps the latest accepted submission for each problem and language, and retrieves its source code.
-5. Each problem accessible to your LeetCode account receives a `README.md` with its statement, a `metadata.json`, and its latest accepted source file for each language under `leetcode-solutions/<problem-slug>/`.
-6. Git stages only `leetcode-solutions/`. If nothing changed, it ends successfully; otherwise, it creates and pushes a `Sync LeetCode solutions` commit.
+1. The `install-dependencies` job checks out the repository, installs Python 3.13, and installs the requirements.
+2. The `test-sync-script` job runs the sync-script unit tests after dependencies install successfully.
+3. The `build-container` job builds and publishes the public sync container after tests pass.
+4. The `sync-leetcode` job runs `scripts/sync_leetcode.py` with the two secrets available only as environment variables.
+5. The script requests the authenticated submission history, keeps the latest accepted submission for each problem and language, and retrieves its source code.
+6. Each problem accessible to your LeetCode account receives a `README.md` with its statement, a `metadata.json`, and its latest accepted source file for each language under `leetcode-solutions/<problem-slug>/`.
+7. Git stages only `leetcode-solutions/`. If nothing changed, it ends successfully; otherwise, it creates and pushes a `Sync LeetCode solutions` commit.
 
 On the first run, the script paginates through all accessible accepted submissions. Later runs use `metadata.json` to avoid downloading source code for submission IDs that are already synchronized. It stores statements only when they are accessible to your account; hidden test cases are not available for export. It uses Python's standard library, so `requirements.txt` has no external dependencies.
 

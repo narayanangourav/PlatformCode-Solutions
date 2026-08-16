@@ -1,0 +1,10 @@
+services:
+  leetcode-sync:
+    build:
+      context: .
+      dockerfile: Containerfile
+    env_file:
+      - .env
+    volumes:
+      - ./leetcode-solutions:/app/leetcode-solutions
+    restart: "no"
