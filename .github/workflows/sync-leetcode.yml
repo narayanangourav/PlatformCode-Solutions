@@ -78,8 +78,8 @@ jobs:
           docker build \
             --file Containerfile \
             --label "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
-            --tag "${IMAGE}:latest" \
-            --tag "${IMAGE}:sha-${GITHUB_SHA::7}" \
+            --tag "${IMAGE}:autosync-latest" \
+            --tag "${IMAGE}:autosync-sha-${GITHUB_SHA::7}" \
             .
           docker push --all-tags "${IMAGE}"
 

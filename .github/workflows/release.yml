@@ -84,8 +84,8 @@ jobs:
           docker build \
             --file Containerfile \
             --label "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
-            --tag "${IMAGE}:${GITHUB_REF_NAME}" \
-            --tag "${IMAGE}:latest" \
+            --tag "${IMAGE}:release-${GITHUB_REF_NAME}" \
+            --tag "${IMAGE}:release-latest" \
             .
           docker push --all-tags "${IMAGE}"
 

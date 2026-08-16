@@ -70,8 +70,8 @@ The workflow uses four dependent jobs: installs dependencies, runs tests, builds
 
 The workflows publish two GitHub Container Registry images:
 
-- `ghcr.io/<owner>/leetcode-solutions-sync:latest` is rebuilt after successful sync-workflow tests.
-- `ghcr.io/<owner>/leetcode-solutions-release:<tag>` is published for each release tag, with a `latest` tag as well.
+- `ghcr.io/<owner>/leetcode-solutions-sync:autosync-latest` is rebuilt after successful sync-workflow tests. Each build also receives an immutable `autosync-sha-<commit>` tag.
+- `ghcr.io/<owner>/leetcode-solutions-release:release-<tag>` is published for each release tag, with a `release-latest` tag as well.
 
 Replace `<owner>` with the GitHub account or organization that owns this repository. Public GHCR images can be pulled without authentication.
 
