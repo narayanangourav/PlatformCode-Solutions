@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "LeetCode Solutions Sync",
+  "description": "Check the active LeetCode session and trigger a repository sync workflow.",
+  "version": "0.1.0",
+  "action": {
+    "default_title": "LeetCode Solutions Sync",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "scripts": ["background.js"],
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "permissions": [
+    "cookies",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://leetcode.com/*",
+    "https://api.github.com/*"
+  ]
+}

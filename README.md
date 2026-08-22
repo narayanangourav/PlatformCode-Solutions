@@ -14,6 +14,7 @@ scripts/
 leetcode-solutions/
   <problem-slug>/     # README, metadata, and synced accepted source files
 .env.example          # Optional local LeetCode session configuration
+browser-extension/    # Optional cross-browser workflow trigger
 ```
 
 ## Requirements
@@ -87,6 +88,12 @@ The workflow at `.github/workflows/sync-leetcode.yml` runs manually from **Actio
 The workflow uses the `github.token` permission to commit changes. Set **Settings → Actions → General → Workflow permissions** to **Read and write permissions**.
 
 To disable only the weekly cron run, create the repository variable `LEETCODE_SYNC_CRON_DISABLED` with the value `true` under **Settings → Secrets and variables → Actions → Variables**. Manual and push-triggered syncs remain enabled. Delete the variable or change its value to re-enable the schedule.
+
+### Optional browser extension
+
+The `browser-extension/` folder contains an optional Manifest V3 extension for Chromium browsers and Firefox. It checks whether the current browser has the LeetCode cookies and can manually trigger `sync-leetcode.yml` in a fork. It never copies cookies to GitHub, stores them, or changes repository secrets. The GitHub schedule remains the automatic sync mechanism.
+
+Each fork owner must still enable Actions, add their own `LEETCODE_SESSION` and `LEETCODE_CSRF_TOKEN` repository secrets, and create a fine-grained GitHub token with **Actions: Read and write** if they want to use the extension's manual trigger. Installation and browser-specific instructions are in [browser-extension/README.md](browser-extension/README.md).
 
 ### Sync flow
 

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>LeetCode Solutions Sync</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main class="popup-shell">
+      <h1>LeetCode sync</h1>
+      <p class="description">The GitHub schedule remains responsible for automatic runs.</p>
+
+      <section aria-labelledby="session-heading">
+        <h2 id="session-heading">LeetCode session</h2>
+        <p id="session-status" class="status" role="status">Not checked.</p>
+        <button id="check-session" type="button">Check browser session</button>
+      </section>
+
+      <section aria-labelledby="workflow-heading">
+        <h2 id="workflow-heading">Run workflow now</h2>
+        <label for="repository">Repository</label>
+        <input id="repository" type="text" placeholder="owner/repository" autocomplete="off">
+
+        <label for="workflow">Workflow file</label>
+        <input id="workflow" type="text" value="sync-leetcode.yml" autocomplete="off">
+
+        <label for="ref">Branch or tag</label>
+        <input id="ref" type="text" value="main" autocomplete="off">
+
+        <label for="token">GitHub token</label>
+        <input id="token" type="password" placeholder="Actions: write" autocomplete="off">
+        <p class="hint">The token is used for this request only and is never saved.</p>
+
+        <button id="run-sync" class="primary" type="button">Start sync</button>
+        <p id="workflow-status" class="status" role="status"></p>
+      </section>
+
+      <p class="security-note">The extension never sends your LeetCode cookies to GitHub or stores them.</p>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>
