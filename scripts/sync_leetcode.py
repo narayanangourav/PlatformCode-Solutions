@@ -48,8 +48,9 @@ LANGUAGE_EXTENSIONS: Final[dict[str, str]] = {
 }
 
 SUBMISSIONS_QUERY: Final = """
-query submissions($offset: Int!, $limit: Int!, $slug: String) {
-  submissionList(offset: $offset, limit: $limit, questionSlug: $slug) {
+query submissions($offset: Int!, $limit: Int!, $lastKey: String, $questionSlug: String) {
+  submissionList(offset: $offset, limit: $limit, lastKey: $lastKey, questionSlug: $questionSlug) {
+    lastKey
     hasNext
     submissions {
       id
@@ -165,11 +166,12 @@ def get_accepted_submissions(session: str, csrf_token: str) -> list[Submission]:
     """Get the latest accepted submission for every problem and language."""
     accepted: dict[tuple[str, str], Submission] = {}
     offset = 0
+    last_key: str | None = None
 
     while True:
         data = request_graphql(
             SUBMISSIONS_QUERY,
-            {"offset": offset, "limit": PAGE_SIZE, "slug": None},
+            {"offset": offset, "limit": PAGE_SIZE, "lastKey": last_key, "questionSlug": None},
             session,
             csrf_token,
         )
@@ -190,6 +192,10 @@ def get_accepted_submissions(session: str, csrf_token: str) -> list[Submission]:
             raise LeetCodeSyncError("LeetCode response did not contain pagination information.")
         if not has_next:
             break
+        response_last_key = submission_list.get("lastKey")
+        if response_last_key is not None and not isinstance(response_last_key, str):
+            raise LeetCodeSyncError("LeetCode response contained invalid pagination data.")
+        last_key = response_last_key
         offset += PAGE_SIZE
 
     return list(accepted.values())
