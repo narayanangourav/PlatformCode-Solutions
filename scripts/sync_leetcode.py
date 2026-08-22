@@ -71,6 +71,52 @@ query submissionDetails($submissionId: Int!) {
 }
 """
 
+SOLVED_QUESTIONS_QUERY: Final = """
+query userProgressQuestionList($filters: UserProgressQuestionListInput) {
+  userProgressQuestionList(filters: $filters) {
+    totalNum
+    questions {
+      title
+      titleSlug
+    }
+  }
+}
+"""
+
+QUESTION_SUBMISSIONS_QUERY: Final = """
+query submissionList($offset: Int!, $limit: Int!, $questionSlug: String!) {
+  questionSubmissionList(
+    offset: $offset
+    limit: $limit
+    questionSlug: $questionSlug
+  ) {
+    submissions {
+      id
+      statusDisplay
+      lang
+    }
+  }
+}
+"""
+
+USER_STATUS_QUERY: Final = """
+query currentUser {
+  userStatus {
+    isSignedIn
+    username
+  }
+}
+"""
+
+RECENT_ACCEPTED_QUERY: Final = """
+query recentAcSubmissions($username: String!, $limit: Int!) {
+  recentAcSubmissionList(username: $username, limit: $limit) {
+    title
+    titleSlug
+  }
+}
+"""
+
 QUESTION_DETAILS_QUERY: Final = """
 query questionDetails($titleSlug: String!) {
   question(titleSlug: $titleSlug) {
@@ -86,6 +132,14 @@ class Submission:
 
     submission_id: int
     language: str
+    title: str
+    title_slug: str
+
+
+@dataclass(frozen=True)
+class SolvedProblem:
+    """A solved problem used to query its authenticated submissions."""
+
     title: str
     title_slug: str
 
@@ -116,7 +170,7 @@ def create_headers(session: str, csrf_token: str) -> dict[str, str]:
 
 
 def request_graphql(
-    query: str, variables: dict[str, int | str | None], session: str, csrf_token: str
+    query: str, variables: dict[str, object], session: str, csrf_token: str
 ) -> dict[str, object]:
     """Run a GraphQL request and reject malformed or error responses."""
     body = json.dumps({"query": query, "variables": variables}).encode("utf-8")
@@ -127,7 +181,8 @@ def request_graphql(
             payload = json.load(response)
     except HTTPError as error:
         raise LeetCodeSyncError(
-            f"LeetCode request failed with HTTP status {error.code}. Verify both GitHub secrets use fresh cookie values and retry."
+            f"LeetCode request failed with HTTP status {error.code}. "
+            "Verify both GitHub secrets use fresh cookie values and retry."
         ) from error
     except URLError as error:
         raise LeetCodeSyncError("Could not connect to LeetCode. Retry the workflow later.") from error
@@ -153,13 +208,18 @@ def parse_submission(value: object) -> Submission | None:
     language = value.get("lang")
     title = value.get("title")
     title_slug = value.get("titleSlug")
-    if not isinstance(submission_id, str) or not submission_id.isdigit():
+    if isinstance(submission_id, int) and submission_id > 0:
+        normalized_submission_id = submission_id
+    elif isinstance(submission_id, str) and submission_id.isdigit():
+        normalized_submission_id = int(submission_id)
+    else:
         return None
     if not isinstance(language, str) or not isinstance(title, str) or not isinstance(title_slug, str):
         return None
-    if not title_slug or language not in LANGUAGE_EXTENSIONS:
+    normalized_language = language.lower()
+    if not title_slug or normalized_language not in LANGUAGE_EXTENSIONS:
         return None
-    return Submission(int(submission_id), language, title, title_slug)
+    return Submission(normalized_submission_id, normalized_language, title, title_slug)
 
 
 def get_accepted_submissions(session: str, csrf_token: str) -> list[Submission]:
@@ -169,18 +229,21 @@ def get_accepted_submissions(session: str, csrf_token: str) -> list[Submission]:
     last_key: str | None = None
 
     while True:
-        data = request_graphql(
-            SUBMISSIONS_QUERY,
-            {"offset": offset, "limit": PAGE_SIZE, "lastKey": last_key, "questionSlug": None},
-            session,
-            csrf_token,
-        )
+        try:
+            data = request_graphql(
+                SUBMISSIONS_QUERY,
+                {"offset": offset, "limit": PAGE_SIZE, "lastKey": last_key, "questionSlug": None},
+                session,
+                csrf_token,
+            )
+        except LeetCodeSyncError:
+            return get_accepted_submissions_by_problem(session, csrf_token)
         submission_list = data.get("submissionList")
         if not isinstance(submission_list, dict):
-            raise LeetCodeSyncError("LeetCode response did not contain a submission list.")
+            return get_accepted_submissions_by_problem(session, csrf_token)
         submissions = submission_list.get("submissions")
         if not isinstance(submissions, list):
-            raise LeetCodeSyncError("LeetCode response contained invalid submissions.")
+            return get_accepted_submissions_by_problem(session, csrf_token)
 
         for item in submissions:
             submission = parse_submission(item)
@@ -189,16 +252,166 @@ def get_accepted_submissions(session: str, csrf_token: str) -> list[Submission]:
 
         has_next = submission_list.get("hasNext")
         if not isinstance(has_next, bool):
-            raise LeetCodeSyncError("LeetCode response did not contain pagination information.")
+            return get_accepted_submissions_by_problem(session, csrf_token)
         if not has_next:
             break
         response_last_key = submission_list.get("lastKey")
         if response_last_key is not None and not isinstance(response_last_key, str):
-            raise LeetCodeSyncError("LeetCode response contained invalid pagination data.")
+            return get_accepted_submissions_by_problem(session, csrf_token)
         last_key = response_last_key
         offset += PAGE_SIZE
 
     return list(accepted.values())
+
+
+def get_solved_problems(session: str, csrf_token: str) -> list[SolvedProblem]:
+    """Get solved problems for the fallback per-problem submission query."""
+    problems_by_slug: dict[str, SolvedProblem] = {}
+    skip = 0
+    page_limit = 100
+
+    while True:
+        data = request_graphql(
+            SOLVED_QUESTIONS_QUERY,
+            {
+                "filters": {
+                    "questionStatus": "SOLVED",
+                    "skip": skip,
+                    "limit": page_limit,
+                }
+            },
+            session,
+            csrf_token,
+        )
+        result = data.get("userProgressQuestionList")
+        if not isinstance(result, dict):
+            raise LeetCodeSyncError("LeetCode did not return the solved-problem list.")
+        question_values = result.get("questions")
+        if not isinstance(question_values, list):
+            raise LeetCodeSyncError("LeetCode returned an invalid solved-problem list.")
+
+        for value in question_values:
+            if not isinstance(value, dict):
+                continue
+            title = value.get("title")
+            title_slug = value.get("titleSlug")
+            if isinstance(title, str) and isinstance(title_slug, str) and title and title_slug:
+                problems_by_slug.setdefault(title_slug, SolvedProblem(title, title_slug))
+
+        total = result.get("totalNum")
+        if not question_values or len(question_values) < page_limit:
+            break
+        if isinstance(total, int) and skip + len(question_values) >= total:
+            break
+        skip += len(question_values)
+
+    return list(problems_by_slug.values())
+
+
+def get_problem_accepted_submissions(
+    problem: SolvedProblem, session: str, csrf_token: str
+) -> list[Submission]:
+    """Get accepted submissions for one solved problem."""
+    accepted: dict[str, Submission] = {}
+    offset = 0
+
+    while True:
+        data = request_graphql(
+            QUESTION_SUBMISSIONS_QUERY,
+            {
+                "offset": offset,
+                "limit": PAGE_SIZE,
+                "questionSlug": problem.title_slug,
+            },
+            session,
+            csrf_token,
+        )
+        submission_list = data.get("questionSubmissionList")
+        if not isinstance(submission_list, dict):
+            break
+        submissions = submission_list.get("submissions")
+        if not isinstance(submissions, list):
+            break
+        for value in submissions:
+            if not isinstance(value, dict) or value.get("statusDisplay") != "Accepted":
+                continue
+            submission_id = value.get("id")
+            language = value.get("lang")
+            if isinstance(submission_id, int) and submission_id > 0:
+                normalized_submission_id = submission_id
+            elif isinstance(submission_id, str) and submission_id.isdigit():
+                normalized_submission_id = int(submission_id)
+            else:
+                continue
+            if not isinstance(language, str):
+                continue
+            normalized_language = language.lower()
+            if normalized_language in LANGUAGE_EXTENSIONS:
+                accepted.setdefault(
+                    normalized_language,
+                    Submission(
+                        normalized_submission_id,
+                        normalized_language,
+                        problem.title,
+                        problem.title_slug,
+                    ),
+                )
+        if len(submissions) < PAGE_SIZE:
+            break
+        offset += PAGE_SIZE
+
+    return list(accepted.values())
+
+
+def get_current_username(session: str, csrf_token: str) -> str:
+    """Return the authenticated username for the recent-submissions fallback."""
+    data = request_graphql(USER_STATUS_QUERY, {}, session, csrf_token)
+    user_status = data.get("userStatus")
+    if not isinstance(user_status, dict) or user_status.get("isSignedIn") is not True:
+        raise LeetCodeSyncError("LeetCode authentication is not active. Refresh both GitHub secrets and retry.")
+    username = user_status.get("username")
+    if not isinstance(username, str) or not username.strip():
+        raise LeetCodeSyncError("LeetCode did not return the authenticated username.")
+    return username
+
+
+def get_recent_solved_problems(session: str, csrf_token: str) -> list[SolvedProblem]:
+    """Get the recent accepted problems available to accounts without progress history."""
+    username = get_current_username(session, csrf_token)
+    data = request_graphql(
+        RECENT_ACCEPTED_QUERY,
+        {"username": username, "limit": PAGE_SIZE},
+        session,
+        csrf_token,
+    )
+    values = data.get("recentAcSubmissionList")
+    if not isinstance(values, list):
+        raise LeetCodeSyncError("LeetCode returned an invalid recent-submission list.")
+    problems_by_slug: dict[str, SolvedProblem] = {}
+    for value in values:
+        if not isinstance(value, dict):
+            continue
+        title = value.get("title")
+        title_slug = value.get("titleSlug")
+        if isinstance(title, str) and isinstance(title_slug, str) and title and title_slug:
+            problems_by_slug.setdefault(title_slug, SolvedProblem(title, title_slug))
+    return list(problems_by_slug.values())
+
+
+def get_accepted_submissions_by_problem(session: str, csrf_token: str) -> list[Submission]:
+    """Recover accepted submissions when the global submission list is unavailable."""
+    try:
+        problems = get_solved_problems(session, csrf_token)
+    except LeetCodeSyncError:
+        problems = []
+    if not problems:
+        print("LeetCode history is unavailable; syncing the recent accepted submissions instead.")
+        problems = get_recent_solved_problems(session, csrf_token)
+
+    accepted: list[Submission] = []
+    for problem in problems:
+        accepted.extend(get_problem_accepted_submissions(problem, session, csrf_token))
+    return accepted
 
 
 def extract_submission_code(data: dict[str, object]) -> str | None:

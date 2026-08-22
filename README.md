@@ -98,7 +98,7 @@ To disable only the weekly cron run, create the repository variable `LEETCODE_SY
 6. Each problem accessible to your LeetCode account receives a `README.md` with its statement, a `metadata.json`, and its latest accepted source file for each language under `leetcode-solutions/<problem-slug>/`.
 7. Git stages only `leetcode-solutions/`. If nothing changed, it ends successfully; otherwise, it creates and pushes a `Sync LeetCode solutions` commit.
 
-On the first run, the script paginates through all accessible accepted submissions. Later runs use `metadata.json` to avoid downloading source code for submission IDs that are already synchronized. It stores statements only when they are accessible to your account; hidden test cases are not available for export. It uses Python's standard library, so `requirements.txt` has no external dependencies.
+On the first run, the script paginates through all accessible accepted submissions. Later runs use `metadata.json` to avoid downloading source code for submission IDs that are already synchronized. If LeetCode does not expose the full progress history for an account, the script falls back to the recent accepted-submission list instead of failing on the older global submission response. It stores statements only when they are accessible to your account; hidden test cases are not available for export. It uses Python's standard library, so `requirements.txt` has no external dependencies.
 
 ## Adding a solution
 

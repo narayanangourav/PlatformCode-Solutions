@@ -47,6 +47,20 @@ class SyncLeetCodeTests(unittest.TestCase):
 
         self.assertIsNone(submission)
 
+    def test_parse_submission_accepts_numeric_submission_ids(self) -> None:
+        submission = parse_submission(
+            {
+                "id": 1,
+                "lang": "python3",
+                "statusDisplay": "Accepted",
+                "title": "Two Sum",
+                "titleSlug": "two-sum",
+            }
+        )
+
+        self.assertIsNotNone(submission)
+        self.assertEqual(submission.submission_id if submission else None, 1)
+
     def test_solution_path_uses_slug_and_language_extension(self) -> None:
         path = get_solution_path(Submission(1, "python3", "Two Sum", "two-sum"))
 
