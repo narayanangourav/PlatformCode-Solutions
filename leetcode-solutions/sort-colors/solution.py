@@ -3,12 +3,18 @@ class Solution:
         """
         Do not return anything, modify nums in-place instead.
         """
-        #self did code
-        k=0
-        while(k<len(nums)):
-            for i in range(0, len(nums)-1):
-                if nums[i] <= nums[i+1]:
-                    continue 
-                else:
-                    nums[i], nums[i+1] = nums[i+1], nums[i]
-            k+=1
+        
+        low = 0
+        mid = 0
+        high = len(nums) - 1
+
+        while mid <= high:
+            if nums[mid] == 0:
+                nums[low], nums[mid] = nums[mid], nums[low]
+                low += 1
+                mid += 1
+            elif nums[mid] == 1:
+                mid += 1
+            else:
+                nums[mid], nums[high] = nums[high], nums[mid]
+                high -= 1
