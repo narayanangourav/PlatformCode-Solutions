@@ -80,14 +80,14 @@ GitHub publishes a newly created container package as private by default. After 
 
 ## Sync accepted submissions
 
-The workflow at `.github/workflows/sync-leetcode.yml` runs manually from **Actions → Sync LeetCode Solutions → Run workflow**, after every push, and at 12:00 AM India Standard Time on the 1st, 10th, 20th, and 30th of each month (6:30 PM UTC on the preceding day). Before the first run, add these repository secrets under **Settings → Secrets and variables → Actions**:
+The workflow at `.github/workflows/sync-leetcode.yml` runs manually from **Actions → Sync LeetCode Solutions → Run workflow**, after every push, and every day at 9:00 AM, 12:00 PM, 3:00 PM, 6:00 PM, 9:00 PM, and 12:00 AM India Standard Time (03:30, 06:30, 09:30, 12:30, 15:30, and 18:30 UTC). Before the first run, add these repository secrets under **Settings → Secrets and variables → Actions**:
 
 - `LEETCODE_CSRF_TOKEN`: the value of your browser's `csrftoken` cookie.
 - `LEETCODE_SESSION`: the value of your browser's `LEETCODE_SESSION` cookie.
 
 The workflow uses the `github.token` permission to commit changes. Set **Settings → Actions → General → Workflow permissions** to **Read and write permissions**.
 
-To disable only the weekly cron run, create the repository variable `LEETCODE_SYNC_CRON_DISABLED` with the value `true` under **Settings → Secrets and variables → Actions → Variables**. Manual and push-triggered syncs remain enabled. Delete the variable or change its value to re-enable the schedule.
+To disable only scheduled runs, create the repository variable `LEETCODE_SYNC_CRON_DISABLED` with the value `true` under **Settings → Secrets and variables → Actions → Variables**. Manual and push-triggered syncs remain enabled. Delete the variable or change its value to re-enable the schedule.
 
 ### Optional browser extension
 
