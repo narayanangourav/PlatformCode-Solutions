@@ -75,13 +75,21 @@ class Submission:
     """The accepted-submission fields required for saving source code."""
 
     submission_id: int
-    language: str
+    language: str | None
     title: str
     title_slug: str
 
 
 class HackerRankSyncError(RuntimeError):
     """Raised when HackerRank data cannot be safely retrieved or validated."""
+
+
+def normalize_language(value: object) -> str | None:
+    """Return a supported HackerRank language identifier when one is available."""
+    if not isinstance(value, str):
+        return None
+    language = value.strip().lower()
+    return language if language in LANGUAGE_EXTENSIONS else None
 
 
 def get_required_environment_value(name: str) -> str:
@@ -146,13 +154,12 @@ def parse_submission(value: object) -> Submission | None:
     else:
         title = value.get("challenge_name")
         title_slug = value.get("challenge_slug")
-    language = value.get("language") or value.get("lang")
-    if not isinstance(title, str) or not isinstance(title_slug, str) or not isinstance(language, str):
+    language = normalize_language(value.get("language") or value.get("lang"))
+    if not isinstance(title, str) or not isinstance(title_slug, str):
         return None
-    normalized_language = language.strip().lower()
-    if not title.strip() or not title_slug.strip() or normalized_language not in LANGUAGE_EXTENSIONS:
+    if not title.strip() or not title_slug.strip():
         return None
-    return Submission(normalized_submission_id, normalized_language, title.strip(), title_slug.strip())
+    return Submission(normalized_submission_id, language, title.strip(), title_slug.strip())
 
 
 def get_models(payload: JsonValue) -> list[dict[str, JsonValue]]:
@@ -178,7 +185,7 @@ def get_accepted_submissions(cookie: str) -> list[Submission]:
             submission = parse_submission(model)
             if submission is None:
                 continue
-            key = (submission.title_slug, submission.language)
+            key = (submission.title_slug, submission.language or "")
             existing = accepted.get(key)
             if existing is None or submission.submission_id > existing.submission_id:
                 accepted[key] = submission
@@ -209,6 +216,14 @@ def extract_submission_code(payload: JsonValue) -> str | None:
         if isinstance(code, str) and code.strip():
             return code
     return None
+
+
+def extract_submission_language(payload: JsonValue) -> str | None:
+    """Return a supported language from a submission-detail response."""
+    model = unwrap_model(payload)
+    if model is None:
+        return None
+    return normalize_language(model.get("language") or model.get("lang"))
 
 
 def get_submission_code(submission: Submission, cookie: str) -> str | None:
@@ -244,7 +259,7 @@ def get_problem_statement(submission: Submission, cookie: str) -> str | None:
 def get_solution_path(submission: Submission) -> Path:
     """Create a safe, deterministic output path below the destination directory."""
     safe_slug = re.sub(r"[^a-z0-9-]+", "-", submission.title_slug.lower()).strip("-")
-    if not safe_slug:
+    if not safe_slug or submission.language is None:
         raise HackerRankSyncError("HackerRank returned an unsafe challenge slug.")
     return DESTINATION_DIRECTORY / safe_slug / f"solution.{LANGUAGE_EXTENSIONS[submission.language]}"
 
@@ -275,6 +290,8 @@ def load_synced_submission_id(path: Path, language: str) -> int | None:
 
 def write_problem_metadata(submission: Submission) -> bool:
     """Record source metadata without copying HackerRank content."""
+    if submission.language is None:
+        raise HackerRankSyncError("HackerRank submission language is unavailable.")
     metadata_path = get_metadata_path(submission)
     existing_submissions: dict[str, int] = {}
     if metadata_path.is_file():
@@ -345,7 +362,28 @@ def main() -> int:
         cookie = get_required_environment_value("HACKERRANK_COOKIE")
         submissions = get_accepted_submissions(cookie)
         updated_count = 0
-        for submission in submissions:
+        for listed_submission in submissions:
+            submission = listed_submission
+            submission_payload: JsonValue | None = None
+            if submission.language is None:
+                submission_payload = request_json(
+                    f"/rest/contests/master/challenges/{submission.title_slug}/submissions/"
+                    f"{submission.submission_id}",
+                    cookie,
+                )
+                language = extract_submission_language(submission_payload)
+                if language is None:
+                    print(
+                        f"Skipped unsupported language for {submission.title_slug} "
+                        f"(submission {submission.submission_id})."
+                    )
+                    continue
+                submission = Submission(
+                    submission.submission_id,
+                    language,
+                    submission.title,
+                    submission.title_slug,
+                )
             solution_path = get_solution_path(submission)
             metadata_path = get_metadata_path(submission)
             is_existing_submission = (
@@ -358,7 +396,11 @@ def main() -> int:
             ):
                 continue
             if not is_existing_submission or not solution_path.is_file():
-                code = get_submission_code(submission, cookie)
+                code = (
+                    extract_submission_code(submission_payload)
+                    if submission_payload is not None
+                    else get_submission_code(submission, cookie)
+                )
                 if code is None:
                     print(
                         f"Skipped unavailable source for {submission.title_slug} "

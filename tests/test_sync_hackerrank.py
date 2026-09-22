@@ -9,6 +9,7 @@ from scripts.sync_hackerrank import (
     Submission,
     extract_problem_statement,
     extract_submission_code,
+    extract_submission_language,
     get_solution_path,
     load_synced_submission_id,
     parse_submission,
@@ -42,6 +43,24 @@ class SyncHackerRankTests(unittest.TestCase):
                     "challenge": {"name": "Two Strings", "slug": "two-strings"},
                 }
             )
+        )
+
+    def test_parse_submission_allows_language_to_be_resolved_from_details(self) -> None:
+        submission = parse_submission(
+            {
+                "id": 9,
+                "status": "Accepted",
+                "challenge": {"name": "Two Strings", "slug": "two-strings"},
+            }
+        )
+
+        self.assertIsNotNone(submission)
+        self.assertIsNone(submission.language if submission else None)
+
+    def test_extract_submission_language_from_detail_response(self) -> None:
+        self.assertEqual(
+            extract_submission_language({"model": {"language": "Python3"}}),
+            "python3",
         )
 
     def test_extract_submission_code_from_detail_response(self) -> None:
