@@ -27,6 +27,18 @@ class SyncHackerRankTests(unittest.TestCase):
     def test_validate_cookie_accepts_named_cookie_pairs(self) -> None:
         validate_cookie("_hrank_session=session-token")
 
+    def test_parse_submission_normalizes_versioned_python_language(self) -> None:
+        submission = parse_submission(
+            {
+                "id": 9,
+                "status": "Accepted",
+                "language": {"name": "Python 3.11"},
+                "challenge": {"name": "Two Strings", "slug": "two-strings"},
+            }
+        )
+
+        self.assertEqual(submission.language if submission else None, "python3")
+
     def test_parse_submission_accepts_nested_challenge_data(self) -> None:
         submission = parse_submission(
             {

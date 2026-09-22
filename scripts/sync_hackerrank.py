@@ -6,6 +6,7 @@ import json
 import os
 import re
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, TypeAlias
@@ -18,6 +19,9 @@ SUBMISSIONS_PATH: Final = "/rest/contests/master/submissions/"
 DESTINATION_DIRECTORY: Final = Path("hackerrank-solutions")
 REQUEST_TIMEOUT_SECONDS: Final = 30
 PAGE_SIZE: Final = 100
+RATE_LIMIT_RETRY_ATTEMPTS: Final = 3
+DEFAULT_RETRY_DELAY_SECONDS: Final = 5
+MAX_RETRY_DELAY_SECONDS: Final = 60
 USER_AGENT: Final = "HackerRank-Solutions-GitHub-Action/1.0"
 PROBLEM_STATEMENT_MARKER: Final = "<!-- synced-problem-statement -->"
 
@@ -86,10 +90,29 @@ class HackerRankSyncError(RuntimeError):
 
 def normalize_language(value: object) -> str | None:
     """Return a supported HackerRank language identifier when one is available."""
+    if isinstance(value, dict):
+        for key in ("name", "slug", "value", "language"):
+            normalized = normalize_language(value.get(key))
+            if normalized is not None:
+                return normalized
+        return None
     if not isinstance(value, str):
         return None
     language = value.strip().lower()
-    return language if language in LANGUAGE_EXTENSIONS else None
+    if language in LANGUAGE_EXTENSIONS:
+        return language
+    compact_language = re.sub(r"[\s_-]+", "", language)
+    if compact_language in LANGUAGE_EXTENSIONS:
+        return compact_language
+    if compact_language.startswith("python3"):
+        return "python3"
+    if compact_language.startswith("python2"):
+        return "python2"
+    if compact_language.startswith("java"):
+        return "java"
+    if compact_language.startswith("cpp") or compact_language.startswith("c++"):
+        return "cpp"
+    return None
 
 
 def get_required_environment_value(name: str) -> str:
@@ -127,8 +150,22 @@ def request_json(path: str, cookie: str, query: dict[str, int] | None = None) ->
         headers=create_headers(cookie),
     )
     try:
-        with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
-            payload = json.load(response)
+        for attempt in range(RATE_LIMIT_RETRY_ATTEMPTS):
+            try:
+                with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+                    payload = json.load(response)
+                break
+            except HTTPError as error:
+                if error.code != 429 or attempt == RATE_LIMIT_RETRY_ATTEMPTS - 1:
+                    raise
+                retry_after_header = error.headers.get("Retry-After") if error.headers else None
+                try:
+                    retry_delay = int(retry_after_header) if retry_after_header else 0
+                except ValueError:
+                    retry_delay = 0
+                if retry_delay <= 0:
+                    retry_delay = DEFAULT_RETRY_DELAY_SECONDS * (attempt + 1)
+                time.sleep(min(retry_delay, MAX_RETRY_DELAY_SECONDS))
     except HTTPError as error:
         raise HackerRankSyncError(
             f"HackerRank request failed with HTTP status {error.code}. "
@@ -163,7 +200,12 @@ def parse_submission(value: object) -> Submission | None:
     else:
         title = value.get("challenge_name")
         title_slug = value.get("challenge_slug")
-    language = normalize_language(value.get("language") or value.get("lang"))
+    language = normalize_language(
+        value.get("language")
+        or value.get("lang")
+        or value.get("language_name")
+        or value.get("language_slug")
+    )
     if not isinstance(title, str) or not isinstance(title_slug, str):
         return None
     if not title.strip() or not title_slug.strip():
@@ -232,7 +274,12 @@ def extract_submission_language(payload: JsonValue) -> str | None:
     model = unwrap_model(payload)
     if model is None:
         return None
-    return normalize_language(model.get("language") or model.get("lang"))
+    return normalize_language(
+        model.get("language")
+        or model.get("lang")
+        or model.get("language_name")
+        or model.get("language_slug")
+    )
 
 
 def get_submission_code(submission: Submission, cookie: str) -> str | None:
