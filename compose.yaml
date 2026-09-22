@@ -8,3 +8,13 @@ services:
     volumes:
       - ./leetcode-solutions:/app/leetcode-solutions
     restart: "no"
+
+  hackerrank-sync:
+    build:
+      context: .
+    env_file:
+      - .env
+    command: ["scripts/sync_hackerrank.py"]
+    volumes:
+      - ./hackerrank-solutions:/app/hackerrank-solutions
+    restart: "no"

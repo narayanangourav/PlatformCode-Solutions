@@ -1,27 +1,23 @@
-name: Release Coding Sync
+name: Sync HackerRank Solutions
 
 on:
+  workflow_dispatch:
   push:
-    tags:
-      - "v*"
-  release:
-    types:
-      - published
+  schedule:
+    # GitHub Actions uses UTC. These are 09:00, 12:00, 15:00, 18:00, 21:00, and 00:00 IST.
+    - cron: "30 3,6,9,12,15,18 * * *"
 
 permissions:
   contents: write
-  packages: write
 
 jobs:
   install-dependencies:
-    if: startsWith(github.ref_name, 'v')
+    if: github.event_name != 'schedule' || vars.HACKERRANK_SYNC_CRON_DISABLED != 'true'
     name: Install dependencies
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
 
     steps:
-      - name: Checkout source
+      - name: Checkout repository
         uses: actions/checkout@v6
 
       - name: Set up Python
@@ -37,11 +33,9 @@ jobs:
     if: needs.install-dependencies.result == 'success'
     name: Test sync script
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
 
     steps:
-      - name: Checkout source
+      - name: Checkout repository
         uses: actions/checkout@v6
 
       - name: Set up Python
@@ -52,20 +46,20 @@ jobs:
       - name: Install dependencies
         run: python -m pip install --require-hashes -r requirements.txt
 
-      - name: Run tests
+      - name: Test sync script
         run: python -m unittest discover -s tests -v
 
-  build-release-container:
+  build-container:
     needs: test-sync-script
     if: needs.test-sync-script.result == 'success'
-    name: Build and publish release container
+    name: Build and publish sync container
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
 
     steps:
-      - name: Checkout source
+      - name: Checkout repository
         uses: actions/checkout@v6
 
       - name: Log in to GitHub Container Registry
@@ -73,58 +67,55 @@ jobs:
           GHCR_TOKEN: ${{ github.token }}
         run: echo "$GHCR_TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
 
-      - name: Build and publish public release image
+      - name: Build and publish public sync image
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           REPOSITORY_NAME="${GITHUB_REPOSITORY#*/}"
-          PACKAGE_NAME="${REPOSITORY_NAME,,}-release"
+          PACKAGE_NAME="${REPOSITORY_NAME,,}-hackerrank-sync"
           IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${PACKAGE_NAME}"
 
           docker build \
             --file Containerfile \
             --label "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
-            --tag "${IMAGE}:release-${GITHUB_REF_NAME}" \
-            --tag "${IMAGE}:release-latest" \
+            --tag "${IMAGE}:autosync-latest" \
+            --tag "${IMAGE}:autosync-sha-${GITHUB_SHA::7}" \
             .
           docker push --all-tags "${IMAGE}"
 
-  publish-release:
-    needs: build-release-container
-    if: needs.build-release-container.result == 'success'
-    name: Publish GitHub release
+  sync-hackerrank:
+    needs: build-container
+    if: needs.build-container.result == 'success'
+    name: Pull accepted HackerRank solutions
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
 
     steps:
-      - name: Checkout source
+      - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Create source bundle
-        run: |
-          mkdir -p dist
-          git archive \
-            --format=zip \
-            --output="dist/coding-sync-${{ github.ref_name }}.zip" \
-            "${{ github.sha }}" \
-            -- \
-            .containerignore \
-            .env.example \
-            Containerfile \
-            LICENSE \
-            README.md \
-            compose.yaml \
-            requirements.txt \
-            scripts
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
 
-      - name: Create or update GitHub release
+      - name: Install dependencies
+        run: python -m pip install --require-hashes -r requirements.txt
+
+      - name: Pull accepted HackerRank submissions
         env:
-          GH_TOKEN: ${{ github.token }}
+          HACKERRANK_COOKIE: ${{ secrets.HACKERRANK_COOKIE }}
+        run: python scripts/sync_hackerrank.py
+
+      - name: Commit synchronized solutions
         run: |
-          if ! gh release view "${{ github.ref_name }}" > /dev/null 2>&1; then
-            gh release create "${{ github.ref_name }}" \
-              --generate-notes \
-              --title "Coding Sync ${{ github.ref_name }}"
+          git add hackerrank-solutions
+
+          if git diff --cached --quiet; then
+            echo "No new HackerRank solutions found."
+            exit 0
           fi
-          gh release upload "${{ github.ref_name }}" "dist/coding-sync-${{ github.ref_name }}.zip" --clobber
+
+          git config user.name "narayanangourav"
+          git config user.email "narayana.n.gourav@gmail.com"
+          git commit -m "Sync HackerRank solutions"
+          git push

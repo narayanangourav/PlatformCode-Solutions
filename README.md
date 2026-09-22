@@ -11,10 +11,13 @@ code/
   sync-leetcode.yml   # Manually triggered sync workflow
 scripts/
   sync_leetcode.py    # Authenticated LeetCode sync script
+  sync_hackerrank.py  # Authenticated HackerRank sync script
 leetcode-solutions/
   <problem-slug>/     # README, metadata, and synced accepted source files
 .env.example          # Optional local LeetCode session configuration
 browser-extension/    # Optional cross-browser workflow trigger
+hackerrank-solutions/
+  <challenge-slug>/    # README, metadata, and synced accepted source files
 ```
 
 ## Requirements
@@ -22,6 +25,8 @@ browser-extension/    # Optional cross-browser workflow trigger
 - Python 3.10 or later
 
 The submitted solution files do not require third-party packages. LeetCode supplies the runtime types and invokes the appropriate method when a solution is submitted.
+
+HackerRank sync uses Python's standard library and does not add third-party dependencies.
 
 ## Using a solution locally
 
@@ -56,6 +61,8 @@ Never commit or share real cookie values. If a value is exposed, sign out of Lee
 
 The container has no network ports and runs as an unprivileged user. Only `leetcode-solutions/` is mounted read-write, so synced files remain in your working tree. `.env` is excluded from both Git and the container build context.
 
+To run the HackerRank sync locally instead, use `podman compose run --rm hackerrank-sync`. It reads `HACKERRANK_COOKIE` from `.env` and writes only to `hackerrank-solutions/`.
+
 ## Releases
 
 Create a `v*` release tag, such as `v1.0.0`, to run the release workflow. You can either publish a release from **Releases → Draft a new release** in the GitHub web UI, or push a tag from your terminal:
@@ -69,10 +76,11 @@ The workflow uses four dependent jobs: installs dependencies, runs tests, builds
 
 ### Public container images
 
-The workflows publish two GitHub Container Registry images:
+The workflows publish three GitHub Container Registry images:
 
 - `ghcr.io/<owner>/leetcode-solutions-sync:autosync-latest` is rebuilt after successful sync-workflow tests. Each build also receives an immutable `autosync-sha-<commit>` tag.
-- `ghcr.io/<owner>/leetcode-solutions-release:release-<tag>` is published for each release tag, with a `release-latest` tag as well.
+- `ghcr.io/<owner>/leetcode-solutions-hackerrank-sync:autosync-latest` is rebuilt after successful HackerRank sync-workflow tests. Each build also receives an immutable `autosync-sha-<commit>` tag.
+- `ghcr.io/<owner>/leetcode-solutions-release:release-<tag>` is published for each release tag, with a `release-latest` tag as well. The release bundle includes both sync scripts and the shared `Containerfile`.
 
 Replace `<owner>` with the GitHub account or organization that owns this repository. Public GHCR images can be pulled without authentication.
 
@@ -112,3 +120,9 @@ On the first run, the script paginates through all accessible accepted submissio
 1. Add one Python file to `code/` using a descriptive problem name.
 2. Keep the public method signature compatible with LeetCode.
 3. Verify the solution against the problem's examples and edge cases before committing.
+
+## Sync accepted HackerRank submissions
+
+The workflow at `.github/workflows/sync-hackerrank.yml` runs manually from **Actions → Sync HackerRank Solutions → Run workflow**, after every push, and every day at 9:00 AM, 12:00 PM, 3:00 PM, 6:00 PM, 9:00 PM, and 12:00 AM India Standard Time. Add the `HACKERRANK_COOKIE` repository secret before the first run. Its value must be the complete cookie value copied from an authenticated HackerRank browser session (without the `Cookie:` prefix); never commit or share it.
+
+The script requests the authenticated submission history, keeps the newest accepted submission for each challenge and language, retrieves its source code, and writes it under `hackerrank-solutions/<challenge-slug>/`. Each challenge also receives a `README.md` and `metadata.json` when HackerRank makes the corresponding data available. To disable scheduled runs, create the repository variable `HACKERRANK_SYNC_CRON_DISABLED` with the value `true`; manual runs remain enabled.

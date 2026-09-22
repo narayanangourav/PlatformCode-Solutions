@@ -11,4 +11,5 @@ COPY --chown=syncuser:syncuser scripts/ ./scripts/
 
 USER syncuser
 
-ENTRYPOINT ["python", "scripts/sync_leetcode.py"]
+ENTRYPOINT ["python"]
+CMD ["scripts/sync_leetcode.py"]
