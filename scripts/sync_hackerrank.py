@@ -19,6 +19,7 @@ SUBMISSIONS_PATH: Final = "/rest/contests/master/submissions/"
 DESTINATION_DIRECTORY: Final = Path("hackerrank-solutions")
 REQUEST_TIMEOUT_SECONDS: Final = 30
 PAGE_SIZE: Final = 100
+REQUEST_INTERVAL_SECONDS: Final = 1
 RATE_LIMIT_RETRY_ATTEMPTS: Final = 3
 DEFAULT_RETRY_DELAY_SECONDS: Final = 5
 MAX_RETRY_DELAY_SECONDS: Final = 60
@@ -27,6 +28,8 @@ PROBLEM_STATEMENT_MARKER: Final = "<!-- synced-problem-statement -->"
 
 LANGUAGE_EXTENSIONS: Final[dict[str, str]] = {
     "bash": "sh",
+    "shell": "sh",
+    "shell-script": "sh",
     "c": "c",
     "cpp": "cpp",
     "cpp14": "cpp",
@@ -43,18 +46,37 @@ LANGUAGE_EXTENSIONS: Final[dict[str, str]] = {
     "java15": "java",
     "javascript": "js",
     "js": "js",
+    "nodejs": "js",
+    "node.js": "js",
     "kotlin": "kt",
     "php": "php",
     "python": "py",
     "python2": "py",
     "python3": "py",
     "python 3": "py",
+    "pypy": "py",
+    "pypy3": "py",
     "ruby": "rb",
     "rust": "rs",
     "scala": "scala",
     "swift": "swift",
     "typescript": "ts",
     "sql": "sql",
+    "mysql": "sql",
+    "oracle": "sql",
+    "oracle sql": "sql",
+    "plsql": "sql",
+    "mssql": "sql",
+    "tsql": "sql",
+    "postgresql": "sql",
+    "postgres": "sql",
+    "sqlite": "sql",
+    "db2": "sql",
+    "nosql": "nosql",
+    "mongodb": "mongodb",
+    "mongo": "mongodb",
+    "html": "html",
+    "css": "css",
     "haskell": "hs",
     "r": "r",
     "dart": "dart",
@@ -88,6 +110,13 @@ class HackerRankSyncError(RuntimeError):
     """Raised when HackerRank data cannot be safely retrieved or validated."""
 
 
+class HackerRankRateLimitError(HackerRankSyncError):
+    """Raised when HackerRank continues rate-limiting after retry attempts."""
+
+
+_LAST_REQUEST_TIME: float | None = None
+
+
 def normalize_language(value: object) -> str | None:
     """Return a supported HackerRank language identifier when one is available."""
     if isinstance(value, dict):
@@ -108,11 +137,14 @@ def normalize_language(value: object) -> str | None:
         return "python3"
     if compact_language.startswith("python2"):
         return "python2"
+    if compact_language.startswith("pypy"):
+        return "pypy3" if compact_language.startswith("pypy3") else "pypy"
     if compact_language.startswith("java"):
         return "java"
     if compact_language.startswith("cpp") or compact_language.startswith("c++"):
         return "cpp"
-    return None
+    language_key = re.sub(r"[^a-z0-9+#.-]+", "-", language).strip("-")
+    return language_key or None
 
 
 def get_required_environment_value(name: str) -> str:
@@ -142,6 +174,16 @@ def validate_cookie(cookie: str) -> None:
         )
 
 
+def wait_between_requests() -> None:
+    """Keep authenticated detail requests below HackerRank's burst limit."""
+    global _LAST_REQUEST_TIME
+    if _LAST_REQUEST_TIME is not None:
+        elapsed = time.monotonic() - _LAST_REQUEST_TIME
+        if elapsed < REQUEST_INTERVAL_SECONDS:
+            time.sleep(REQUEST_INTERVAL_SECONDS - elapsed)
+    _LAST_REQUEST_TIME = time.monotonic()
+
+
 def request_json(path: str, cookie: str, query: dict[str, int] | None = None) -> JsonValue:
     """Run an authenticated HackerRank request and validate its JSON envelope."""
     query_string = f"?{urlencode(query)}" if query else ""
@@ -152,6 +194,7 @@ def request_json(path: str, cookie: str, query: dict[str, int] | None = None) ->
     try:
         for attempt in range(RATE_LIMIT_RETRY_ATTEMPTS):
             try:
+                wait_between_requests()
                 with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
                     payload = json.load(response)
                 break
@@ -167,6 +210,10 @@ def request_json(path: str, cookie: str, query: dict[str, int] | None = None) ->
                     retry_delay = DEFAULT_RETRY_DELAY_SECONDS * (attempt + 1)
                 time.sleep(min(retry_delay, MAX_RETRY_DELAY_SECONDS))
     except HTTPError as error:
+        if error.code == 429:
+            raise HackerRankRateLimitError(
+                "HackerRank rate-limited the sync after repeated requests. Retry the workflow later."
+            ) from error
         raise HackerRankSyncError(
             f"HackerRank request failed with HTTP status {error.code}. "
             "Verify the HACKERRANK_COOKIE secret and retry."
@@ -317,7 +364,9 @@ def get_solution_path(submission: Submission) -> Path:
     safe_slug = re.sub(r"[^a-z0-9-]+", "-", submission.title_slug.lower()).strip("-")
     if not safe_slug or submission.language is None:
         raise HackerRankSyncError("HackerRank returned an unsafe challenge slug.")
-    return DESTINATION_DIRECTORY / safe_slug / f"solution.{LANGUAGE_EXTENSIONS[submission.language]}"
+    safe_extension = re.sub(r"[^a-z0-9]+", "-", submission.language).strip("-") or "txt"
+    extension = LANGUAGE_EXTENSIONS.get(submission.language, safe_extension)
+    return DESTINATION_DIRECTORY / safe_slug / f"solution.{extension}"
 
 
 def get_metadata_path(submission: Submission) -> Path:
@@ -423,15 +472,22 @@ def main() -> int:
             submission = listed_submission
             submission_payload: JsonValue | None = None
             if submission.language is None:
-                submission_payload = request_json(
-                    f"/rest/contests/master/challenges/{submission.title_slug}/submissions/"
-                    f"{submission.submission_id}",
-                    cookie,
-                )
+                try:
+                    submission_payload = request_json(
+                        f"/rest/contests/master/challenges/{submission.title_slug}/submissions/"
+                        f"{submission.submission_id}",
+                        cookie,
+                    )
+                except HackerRankRateLimitError:
+                    print(
+                        f"Skipped rate-limited submission {submission.title_slug} "
+                        f"({submission.submission_id}); it will retry on the next run."
+                    )
+                    continue
                 language = extract_submission_language(submission_payload)
                 if language is None:
                     print(
-                        f"Skipped unsupported language for {submission.title_slug} "
+                        f"Skipped submission with unavailable language for {submission.title_slug} "
                         f"(submission {submission.submission_id})."
                     )
                     continue
@@ -453,11 +509,18 @@ def main() -> int:
             ):
                 continue
             if not is_existing_submission or not solution_path.is_file():
-                code = (
-                    extract_submission_code(submission_payload)
-                    if submission_payload is not None
-                    else get_submission_code(submission, cookie)
-                )
+                try:
+                    code = (
+                        extract_submission_code(submission_payload)
+                        if submission_payload is not None
+                        else get_submission_code(submission, cookie)
+                    )
+                except HackerRankRateLimitError:
+                    print(
+                        f"Skipped rate-limited submission {submission.title_slug} "
+                        f"({submission.submission_id}); it will retry on the next run."
+                    )
+                    continue
                 if code is None:
                     print(
                         f"Skipped unavailable source for {submission.title_slug} "

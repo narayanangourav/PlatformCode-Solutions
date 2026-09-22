@@ -39,6 +39,30 @@ class SyncHackerRankTests(unittest.TestCase):
 
         self.assertEqual(submission.language if submission else None, "python3")
 
+    def test_parse_submission_accepts_nosql_language(self) -> None:
+        submission = parse_submission(
+            {
+                "id": 9,
+                "status": "Accepted",
+                "language": "NoSQL",
+                "challenge": {"name": "Mongo Query", "slug": "mongo-query"},
+            }
+        )
+
+        self.assertEqual(submission.language if submission else None, "nosql")
+
+    def test_parse_submission_normalizes_pypy3_language(self) -> None:
+        submission = parse_submission(
+            {
+                "id": 9,
+                "status": "Accepted",
+                "language": "PyPy3",
+                "challenge": {"name": "Two Strings", "slug": "two-strings"},
+            }
+        )
+
+        self.assertEqual(submission.language if submission else None, "pypy3")
+
     def test_parse_submission_accepts_nested_challenge_data(self) -> None:
         submission = parse_submission(
             {
@@ -99,6 +123,11 @@ class SyncHackerRankTests(unittest.TestCase):
         path = get_solution_path(Submission(1, "python3", "Two Strings", "two-strings"))
 
         self.assertEqual(path, Path("hackerrank-solutions/two-strings/solution.py"))
+
+    def test_solution_path_preserves_an_unrecognized_language_extension(self) -> None:
+        path = get_solution_path(Submission(1, "custom-lang", "Custom", "custom"))
+
+        self.assertEqual(path, Path("hackerrank-solutions/custom/solution.custom-lang"))
 
     def test_write_solution_only_updates_changed_source(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
