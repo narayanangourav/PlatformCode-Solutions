@@ -15,10 +15,18 @@ from scripts.sync_hackerrank import (
     parse_submission,
     write_problem_readme,
     write_solution,
+    validate_cookie,
 )
 
 
 class SyncHackerRankTests(unittest.TestCase):
+    def test_validate_cookie_rejects_a_bare_token(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "cookie pairs"):
+            validate_cookie("session-token-only")
+
+    def test_validate_cookie_accepts_named_cookie_pairs(self) -> None:
+        validate_cookie("_hrank_session=session-token")
+
     def test_parse_submission_accepts_nested_challenge_data(self) -> None:
         submission = parse_submission(
             {

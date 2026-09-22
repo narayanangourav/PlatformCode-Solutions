@@ -110,6 +110,15 @@ def create_headers(cookie: str) -> dict[str, str]:
     }
 
 
+def validate_cookie(cookie: str) -> None:
+    """Reject a bare token because HackerRank expects named cookie pairs."""
+    cookie_pairs = [part.strip() for part in cookie.split(";") if part.strip()]
+    if not any("=" in pair and pair.split("=", 1)[0].strip() for pair in cookie_pairs):
+        raise HackerRankSyncError(
+            "HACKERRANK_COOKIE must contain cookie pairs such as '_hrank_session=value'."
+        )
+
+
 def request_json(path: str, cookie: str, query: dict[str, int] | None = None) -> JsonValue:
     """Run an authenticated HackerRank request and validate its JSON envelope."""
     query_string = f"?{urlencode(query)}" if query else ""
@@ -360,6 +369,7 @@ def main() -> int:
     """Synchronize accepted submissions and return a process exit code."""
     try:
         cookie = get_required_environment_value("HACKERRANK_COOKIE")
+        validate_cookie(cookie)
         submissions = get_accepted_submissions(cookie)
         updated_count = 0
         for listed_submission in submissions:
